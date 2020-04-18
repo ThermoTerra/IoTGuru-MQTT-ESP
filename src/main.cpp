@@ -10,7 +10,9 @@ const char* mqttUser = "g46NIng-txfaUvdQZj0R6g";
 const char* mqttPassword = "s_QOxnkl-bXRZnkJnOdDrQ";
 const char* clientID = "klrv5wfaa6t82ClQfcIR6g";
 const char* deviceID = mqttUser;//"g46NIng-txdn60mgZj4R6g"
- 
+static char MQTT_path[200];
+static char MQTT_payload[20];
+
 // used by serial read
 const byte numChars = 50;
 char receivedChars[numChars];
@@ -18,13 +20,13 @@ boolean newData = false;
 #define TUPLE_MAX 3
 // more efficienty to allocate this way
 char tuple_values[TUPLE_MAX][numChars];
-const char startMarker = '< ';
+const char startMarker = '<';
 const char endMarker = '>';
 const char seperator = ',';
 
 
 void reciveTuple();
-void showNewData();
+void recevieTupleAndSend();
 void callback(char* topic, byte* payload, unsigned int length);
 
 WiFiClient espClient;
@@ -60,9 +62,9 @@ void setup() {
  
     }
   }
- 
-  client.publish("pub/g46NIng-txfaUvdQZj0R6g/klrv5wfaa6t82ClQfcIR6g/jWcrox0QP1arY-cAfcIR6g/voc", "3.14"); //Topic name
+  client.publish("pub/g46NIng-txfaUvdQZj0R6g/klrv5wfaa6t82ClQfcIR6g/jWcrox0QP1arY-cAfcIR6g/co2","44.55");
   //client.subscribe("esp/test");
+  Serial.print("\nPrompt> ");
  
 }
  
@@ -72,7 +74,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
   Serial.println(topic);
  
   Serial.print("Message:");
-  for (int i = 0; i < length; i++) {
+  for (unsigned int i = 0; i < length; i++) {
     Serial.print((char)payload[i]);
   }
  
@@ -84,6 +86,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
 void loop() {
   reciveTuple();
   client.loop();
+  recevieTupleAndSend();
 }
 
 
@@ -95,32 +98,36 @@ Insert every element to an element in a string array; */
     static byte ndx = 0;
 
     char rc;
-    short position;
+    static short position=0;
  
  
     while (Serial.available() > 0 && newData == false) {
         rc = Serial.read();
+        Serial.print(rc); // echo back
         switch(rc) {
           case seperator:
             // terminate this string
-            if (!recvInProgress) break; // expect only start marker initally
+            if (!recvInProgress) {Serial.print('x'); break; }; // expect only start marker initally
             tuple_values[position][ndx] = '\0';
-            if (position<TUPLE_MAX-2)
-              position=position+1;
-            else
-              { // if tuple larger then max size, the seperator will act as an end
-                Serial.print('tupple exceeded max');
-                position=0;
+            if (position<TUPLE_MAX-1)
+              {
+                position=position+1;
               }
-            ndx=0;
-
-              
-          break;
+            else
+              { // if tuple larger then max size, this will end the tuple
+                Serial.print("tupple exceeded max");
+                position=0;
+                recvInProgress=false;
+                newData=true;
+              }
+            ndx=0;              
+            break;
           case endMarker:
-            if (!recvInProgress) break; // expect only start marker initally
+            if (!recvInProgress) {Serial.print('!'); break; } // expect only start marker initally
             newData=true;
             // terminate this string
             tuple_values[position][ndx] = '\0';
+            recvInProgress=false;
             position=0;
             ndx=0;
 
@@ -129,7 +136,7 @@ Insert every element to an element in a string array; */
               recvInProgress = true;
           break;
           default:
-            if (!recvInProgress) break; // expect only start marker initally
+            if (!recvInProgress) {Serial.print('?'); break; } // expect only start marker initally
             tuple_values[position][ndx] = rc;
             ndx++;
             if (ndx >= numChars) {
@@ -139,14 +146,47 @@ Insert every element to an element in a string array; */
     } //while
 }
 
-void showNewData() {
+void recevieTupleAndSend() {
     if (newData == true) {
         Serial.print("This just in:");
         for (int p=0;p<TUPLE_MAX; p++)
         {
           Serial.println(tuple_values[p]);
         }
+        strcpy(MQTT_path,"pub/"); //g46NIng-txfaUvdQZj0R6g/klrv5wfaa6t82ClQfcIR6g/");
+        strcat(MQTT_path,mqttUser);
+        strcat(MQTT_path,"/");
+        strcat(MQTT_path,clientID);
+        strcat(MQTT_path,"/");
+        strcat(MQTT_path,tuple_values[0]);
+        strcat(MQTT_path,"/");
+        strcat(MQTT_path,tuple_values[1]);
         
+        strcpy(MQTT_payload,tuple_values[2]);
+
+        Serial.print("Publishing ");
+        Serial.print(MQTT_payload);
+        Serial.print(" to [");
+        Serial.print(MQTT_path);
+        Serial.println("]");
+        while (!client.connected()) {
+          Serial.println("Connecting to MQTT...");
+      
+          if (client.connect(clientID, mqttUser, mqttPassword )) {
+      
+            Serial.println("connected");  
+      
+          } else {
+      
+            Serial.print("failed with state ");
+            Serial.print(client.state());
+            
+      
+          }
+        }
+        //client.publish("pub/g46NIng-txfaUvdQZj0R6g/klrv5wfaa6t82ClQfcIR6g/jWcrox0QP1arY-cAfcIR6g/co2","44.55");
+        client.publish(MQTT_path, MQTT_payload); //Topic name
         newData = false;
+        Serial.print("\nPrompt> ");
     }
 }
