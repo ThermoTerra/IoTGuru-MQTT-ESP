@@ -62,7 +62,7 @@ void setup() {
  
     }
   }
-  client.publish("pub/g46NIng-txfaUvdQZj0R6g/klrv5wfaa6t82ClQfcIR6g/jWcrox0QP1arY-cAfcIR6g/co2","44.55");
+  client.publish("pub/g46NIng-txfaUvdQZj0R6g/klrv5wfaa6t82ClQfcIR6g/jWcrox0QP1arY-cAfcIR6g/co2","00.00");
   //client.subscribe("esp/test");
   Serial.print("\nPrompt> ");
  
@@ -148,11 +148,7 @@ Insert every element to an element in a string array; */
 
 void recevieTupleAndSend() {
     if (newData == true) {
-        Serial.print("This just in:");
-        for (int p=0;p<TUPLE_MAX; p++)
-        {
-          Serial.println(tuple_values[p]);
-        }
+        
         strcpy(MQTT_path,"pub/"); //g46NIng-txfaUvdQZj0R6g/klrv5wfaa6t82ClQfcIR6g/");
         strcat(MQTT_path,mqttUser);
         strcat(MQTT_path,"/");
@@ -161,14 +157,10 @@ void recevieTupleAndSend() {
         strcat(MQTT_path,tuple_values[0]);
         strcat(MQTT_path,"/");
         strcat(MQTT_path,tuple_values[1]);
-        
+
         strcpy(MQTT_payload,tuple_values[2]);
 
-        Serial.print("Publishing ");
-        Serial.print(MQTT_payload);
-        Serial.print(" to [");
-        Serial.print(MQTT_path);
-        Serial.println("]");
+       
         while (!client.connected()) {
           Serial.println("Connecting to MQTT...");
       
@@ -187,6 +179,6 @@ void recevieTupleAndSend() {
         //client.publish("pub/g46NIng-txfaUvdQZj0R6g/klrv5wfaa6t82ClQfcIR6g/jWcrox0QP1arY-cAfcIR6g/co2","44.55");
         client.publish(MQTT_path, MQTT_payload); //Topic name
         newData = false;
-        Serial.print("\nPrompt> ");
+        Serial.print("\nOK> ");
     }
 }
