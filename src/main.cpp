@@ -1,15 +1,11 @@
 #include <Arduino.h>
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
+#include <secrets.h>
+#include <esp_mqtt.h>
+#include <MqttClient.h>
  
-const char* ssid = "Tronet"; // Enter your WiFi name
-const char* password =  "Shira2306"; // Enter WiFi password
-const char* mqttServer = "mqtt.iotguru.cloud";
-const int mqttPort = 1883;
-const char* mqttUser = "g46NIng-txfaUvdQZj0R6g";
-const char* mqttPassword = "s_QOxnkl-bXRZnkJnOdDrQ";
-const char* clientID = "klrv5wfaa6t82ClQfcIR6g";
-const char* deviceID = mqttUser;//"g46NIng-txdn60mgZj4R6g"
+
 static char MQTT_path[200];
 static char MQTT_payload[20];
 
@@ -17,13 +13,9 @@ static char MQTT_payload[20];
 const byte numChars = 50;
 char receivedChars[numChars];
 boolean newData = false;
-#define TUPLE_MAX 3
+
 // more efficienty to allocate this way
 char tuple_values[TUPLE_MAX][numChars];
-const char startMarker = '<';
-const char endMarker = '>';
-const char seperator = ',';
-
 
 void reciveTuple();
 void recevieTupleAndSend();
@@ -105,7 +97,7 @@ Insert every element to an element in a string array; */
         rc = Serial.read();
         Serial.print(rc); // echo back
         switch(rc) {
-          case seperator:
+          case Seperator:
             // terminate this string
             if (!recvInProgress) {Serial.print('x'); break; }; // expect only start marker initally
             tuple_values[position][ndx] = '\0';
@@ -122,7 +114,7 @@ Insert every element to an element in a string array; */
               }
             ndx=0;              
             break;
-          case endMarker:
+          case EndMarker:
             if (!recvInProgress) {Serial.print('!'); break; } // expect only start marker initally
             newData=true;
             // terminate this string
@@ -132,7 +124,7 @@ Insert every element to an element in a string array; */
             ndx=0;
 
           break;
-          case startMarker:
+          case StartMarker:
               recvInProgress = true;
           break;
           default:
