@@ -1,5 +1,8 @@
 #include <Arduino.h>
 #include <ESP8266WiFi.h>
+
+#define MQTT_KEEPALIVE 100 // change the value that PubSubClient will be using - keep conection alive for longer, as we wait for the end of interval.
+
 #include <PubSubClient.h>
 #include <secrets.h>
 #include <esp_mqtt.h>
@@ -32,7 +35,9 @@ void setup() {
  
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
-    Serial.println("Connecting to WiFi..");
+    Serial.print("SSID: ");
+    Serial.print(ssid);
+    Serial.println(": Connecting to WiFi..");
   }
   Serial.println("Connected to the WiFi network");
  
