@@ -84,11 +84,11 @@ Serial.println();
   sub_base_length=4+strlen(mqttUser)+1+strlen(deviceID)+1; 
   sprintf(substring,"sub/%s/%s/kUE3wPdX4hRmtEBAi40R6g/fan_speed",mqttUser, deviceID);
   Serial.print("subscribing to bottom cell fan ");
-  Serial.print(substring);
+  Serial.println(substring);
   client.subscribe(substring);
   sprintf(substring,"sub/%s/%s/ggSLn0x7f3iF4suAfl4R6g/fan_speed",mqttUser, deviceID);
   Serial.print("subscribing to to cell fan");
-  Serial.print(substring);
+  Serial.println(substring);
   client.subscribe(substring);
   
   Serial.print("\nPrompt> ");
@@ -98,7 +98,7 @@ Serial.println();
 void callback(char* topic, byte* payload, unsigned int length) {
  
   
-  Serial.print("<");
+  Serial.print(returnValue);
   Serial.print(topic+sub_base_length); // print only from the point of difference 
  
   Serial.print("/");
@@ -106,7 +106,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
     Serial.print((char)payload[i]);
   }
  
-  Serial.println();
+  Serial.println(returnValueTerm);
  
 }
  
