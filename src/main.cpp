@@ -7,6 +7,7 @@
 #include <secrets.h>
 #include <esp_mqtt.h>
 #include <MqttClient.h>
+#include <user_interface.h>
  
 
 static char MQTT_path[200];
@@ -20,6 +21,8 @@ boolean newData = false;
 // more efficienty to allocate this way
 char tuple_values[TUPLE_MAX][numChars];
 
+int sub_base_length; // the part of the subscription string which is constant - will not transfer to Mega
+
 void reciveTuple();
 void recevieTupleAndSend();
 void callback(char* topic, byte* payload, unsigned int length);
@@ -30,6 +33,21 @@ PubSubClient client(espClient);
 void setup() {
  
   Serial.begin(115200);
+
+  struct rst_info * rstinfo=system_get_rst_info();
+
+  Serial.print("Reason for reset: ");
+  switch (rstinfo->reason) {
+    case 0: Serial.print("normal startup by power on "); break; 
+    case 1: Serial.print("hardware watch dog reset "); break; 
+    case 2: Serial.print("exception reset: GPIO status won’t change "); break; 
+    case 3: Serial.print("software watch dog reset: GPIO status won’t change "); break; 
+    case 4: Serial.print("software restart ,system_restart : GPIO status won’t change "); break; 
+    case 5: Serial.print("wake up from deep-sleep "); break; 
+    case 6: Serial.print(" external system reset "); break; 
+  }
+Serial.println();
+
  
   WiFi.begin(ssid, password);
  
@@ -60,23 +78,35 @@ void setup() {
     }
   }
   client.publish("pub/g46NIng-txfaUvdQZj0R6g/klrv5wfaa6t82ClQfcIR6g/jWcrox0QP1arY-cAfcIR6g/co2","00.00");
-  //client.subscribe("esp/test");
+
+  char substring[200];
+  // calculate the lentgh of the base string
+  sub_base_length=4+strlen(mqttUser)+1+strlen(deviceID)+1; 
+  sprintf(substring,"sub/%s/%s/kUE3wPdX4hRmtEBAi40R6g/fan_speed",mqttUser, deviceID);
+  Serial.print("subscribing to bottom cell fan ");
+  Serial.print(substring);
+  client.subscribe(substring);
+  sprintf(substring,"sub/%s/%s/ggSLn0x7f3iF4suAfl4R6g/fan_speed",mqttUser, deviceID);
+  Serial.print("subscribing to to cell fan");
+  Serial.print(substring);
+  client.subscribe(substring);
+  
   Serial.print("\nPrompt> ");
  
 }
  
 void callback(char* topic, byte* payload, unsigned int length) {
  
-  Serial.print("Message arrived in topic: ");
-  Serial.println(topic);
+  
+  Serial.print("<");
+  Serial.print(topic+sub_base_length); // print only from the point of difference 
  
-  Serial.print("Message:");
+  Serial.print("/");
   for (unsigned int i = 0; i < length; i++) {
     Serial.print((char)payload[i]);
   }
  
   Serial.println();
-  Serial.println("-----------------------");
  
 }
  
@@ -159,7 +189,7 @@ void recevieTupleAndSend() {
 
        
         while (!client.connected()) {
-          Serial.println("Connecting to MQTT...");
+          Serial.println("Reconnecting to MQTT...");
       
           if (client.connect(clientID, mqttUser, mqttPassword )) {
       
@@ -176,6 +206,7 @@ void recevieTupleAndSend() {
         //client.publish("pub/g46NIng-txfaUvdQZj0R6g/klrv5wfaa6t82ClQfcIR6g/jWcrox0QP1arY-cAfcIR6g/co2","44.55");
         client.publish(MQTT_path, MQTT_payload); //Topic name
         newData = false;
+        Serial.print(millis());
         Serial.print("\nOK> ");
     }
 }
