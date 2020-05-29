@@ -82,11 +82,11 @@ Serial.println();
   char substring[200];
   // calculate the lentgh of the base string
   sub_base_length=4+strlen(mqttUser)+1+strlen(deviceID)+1; 
-  sprintf(substring,"sub/%s/%s/kUE3wPdX4hRmtEBAi40R6g/fan_speed",mqttUser, deviceID);
+  sprintf(substring,"sub/%s/%s/%s/fan_speed",mqttUser, deviceID,BOTTOMCELL_node);
   Serial.print("subscribing to bottom cell fan ");
   Serial.println(substring);
   client.subscribe(substring);
-  sprintf(substring,"sub/%s/%s/ggSLn0x7f3iF4suAfl4R6g/fan_speed",mqttUser, deviceID);
+  sprintf(substring,"sub/%s/%s/%s/fan_speed",mqttUser, deviceID,TOPCELL_node);
   Serial.print("subscribing to to cell fan");
   Serial.println(substring);
   client.subscribe(substring);
@@ -98,7 +98,7 @@ Serial.println();
 void callback(char* topic, byte* payload, unsigned int length) {
  
   
-  Serial.print(returnValue);
+  Serial.print(sub_prefix);
   Serial.print(topic+sub_base_length); // print only from the point of difference 
  
   Serial.print("/");
@@ -106,7 +106,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
     Serial.print((char)payload[i]);
   }
  
-  Serial.println(returnValueTerm);
+  Serial.println(sub_suffix);
  
 }
  
