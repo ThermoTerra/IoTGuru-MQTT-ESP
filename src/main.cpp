@@ -29,7 +29,9 @@ void callback(char* topic, byte* payload, unsigned int length);
 
 WiFiClient espClient;
 PubSubClient client(espClient);
- 
+
+char sub_topic1_str[200],sub_topic2_str[200];
+
 void setup() {
  
   Serial.begin(115200);
@@ -79,19 +81,20 @@ Serial.println();
   }
   client.publish("pub/g46NIng-txfaUvdQZj0R6g/klrv5wfaa6t82ClQfcIR6g/jWcrox0QP1arY-cAfcIR6g/co2","00.00");
 
-  char substring[200];
+ 
   // calculate the lentgh of the base string
   sub_base_length=4+strlen(mqttUser)+1+strlen(deviceID)+1; 
-  sprintf(substring,"sub/%s/%s/%s/fan_speed",mqttUser, deviceID,BOTTOMCELL_node);
+  sprintf(sub_topic1_str,"sub/%s/%s/%s/fan_speed",mqttUser, deviceID,BOTTOMCELL_node);
   Serial.print("subscribing to bottom cell fan ");
-  Serial.println(substring);
-  client.subscribe(substring);
-  sprintf(substring,"sub/%s/%s/%s/fan_speed",mqttUser, deviceID,TOPCELL_node);
+  Serial.println(sub_topic1_str);
+  client.subscribe(sub_topic1_str);
+  sprintf(sub_topic2_str,"sub/%s/%s/%s/fan_speed",mqttUser, deviceID,TOPCELL_node);
   Serial.print("subscribing to to cell fan");
-  Serial.println(substring);
-  client.subscribe(substring);
+  Serial.println(sub_topic2_str);
+  client.subscribe(sub_topic2_str);
   
-  Serial.print("\nPrompt> ");
+  Serial.println();
+  Serial.print(prompt);
  
 }
  
@@ -142,7 +145,8 @@ Insert every element to an element in a string array; */
               }
             else
               { // if tuple larger then max size, this will end the tuple
-                Serial.print("tupple exceeded max");
+                Serial.print(err_prefix);
+                Serial.println("tupple exceeded max");
                 position=0;
                 recvInProgress=false;
                 newData=true;
@@ -157,7 +161,7 @@ Insert every element to an element in a string array; */
             recvInProgress=false;
             position=0;
             ndx=0;
-
+            Serial.println();
           break;
           case StartMarker:
               recvInProgress = true;
@@ -187,26 +191,32 @@ void recevieTupleAndSend() {
 
         strcpy(MQTT_payload,tuple_values[2]);
 
-       
-        while (!client.connected()) {
-          Serial.println("Reconnecting to MQTT...");
-      
-          if (client.connect(clientID, mqttUser, mqttPassword )) {
-      
-            Serial.println("connected");  
-      
-          } else {
-      
-            Serial.print("failed with state ");
-            Serial.print(client.state());
-            
-      
+        if (!client.connected()) {
+          while (!client.connected()) {
+            Serial.print(err_prefix);
+            Serial.println("Reconnecting to MQTT...");
+        
+            if (client.connect(clientID, mqttUser, mqttPassword )) {
+              Serial.print(err_prefix);
+              Serial.println("connected");  
+        
+            } else {
+              Serial.print(err_prefix);
+              Serial.print("failed with state ");
+              Serial.print(client.state());
+              
+        
+            }
+
           }
+          client.subscribe(sub_topic1_str);
+          client.subscribe(sub_topic2_str);
         }
-        //client.publish("pub/g46NIng-txfaUvdQZj0R6g/klrv5wfaa6t82ClQfcIR6g/jWcrox0QP1arY-cAfcIR6g/co2","44.55");
+        
         client.publish(MQTT_path, MQTT_payload); //Topic name
         newData = false;
         Serial.print(millis());
-        Serial.print("\nOK> ");
+        Serial.print(" ");
+        Serial.print(prompt);
     }
 }
