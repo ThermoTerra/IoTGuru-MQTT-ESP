@@ -1,7 +1,7 @@
 #include <Arduino.h>
 #include <ESP8266WiFi.h>
 
-#define MQTT_KEEPALIVE 100 // change the value that PubSubClient will be using - keep conection alive for longer, as we wait for the end of interval.
+#define MQTT_KEEPALIVE 1000 // change the value that PubSubClient will be using - keep conection alive for longer, as we wait for the end of interval.
 
 #include <PubSubClient.h>
 #include <secrets.h>
@@ -49,8 +49,11 @@ void setup() {
     case 6: Serial.print(" external system reset "); break; 
   }
 Serial.println();
-
- 
+ /* IPAddress ip(192, 168, 0, 177); 
+  IPAddress gw(192, 168, 0, 19); 
+  IPAddress subnet(255, 255, 255, 0); 
+  IPAddress dns (203,145,184,13);
+  WiFi.config(ip,gw,subnet);*/
   WiFi.begin(ssid, password);
  
   while (WiFi.status() != WL_CONNECTED) {
@@ -60,6 +63,8 @@ Serial.println();
     Serial.println(": Connecting to WiFi..");
   }
   Serial.println("Connected to the WiFi network");
+  Serial.println("IP address: ");
+  Serial.println(WiFi.localIP()); 
  
   client.setServer(mqttServer, mqttPort);
   client.setCallback(callback);
@@ -92,6 +97,10 @@ Serial.println();
   Serial.print("subscribing to to cell fan");
   Serial.println(sub_topic2_str);
   client.subscribe(sub_topic2_str);
+  sprintf(sub_topic1_str,"sub/%s/%s/%s/ac_on",mqttUser, deviceID,INROOM_node);
+  Serial.print("subscribing to AC on-off ");
+  Serial.println(sub_topic1_str);
+  client.subscribe(sub_topic1_str);
   
   Serial.println();
   Serial.print(prompt);
@@ -117,6 +126,7 @@ void loop() {
   reciveTuple();
   client.loop();
   recevieTupleAndSend();
+  delay(1);
 }
 
 
@@ -190,7 +200,19 @@ void recevieTupleAndSend() {
         strcat(MQTT_path,tuple_values[1]);
 
         strcpy(MQTT_payload,tuple_values[2]);
-
+        if (WiFi.status() != WL_CONNECTED) {
+            Serial.print(err_prefix);
+            Serial.println("Wifi disconnected");
+            while (WiFi.status() != WL_CONNECTED) {
+            delay(500);
+            Serial.print(err_prefix);
+            Serial.print("SSID: ");
+            Serial.print(ssid);
+            Serial.println(": Connecting to WiFi..");
+          }
+          Serial.print(err_prefix);
+          Serial.println("Connected to the WiFi network");
+        }
         if (!client.connected()) {
           while (!client.connected()) {
             Serial.print(err_prefix);
