@@ -1,14 +1,17 @@
 #include <Arduino.h>
 #include <ESP8266WiFi.h>
 
-#define MQTT_KEEPALIVE 1000 // change the value that PubSubClient will be using - keep conection alive for longer, as we wait for the end of interval.
+
+
 
 #include <PubSubClient.h>
 #include <secrets.h>
 #include <esp_mqtt.h>
 #include <MqttClient.h>
 #include <user_interface.h>
+#include <ESP8266HTTPClient.h>
  
+
 
 static char MQTT_path[200];
 static char MQTT_payload[20];
@@ -26,28 +29,21 @@ int sub_base_length; // the part of the subscription string which is constant - 
 void reciveTuple();
 void recevieTupleAndSend();
 void callback(char* topic, byte* payload, unsigned int length);
+void sendEvent(char *text);
 
 WiFiClient espClient;
 PubSubClient client(espClient);
 
-char sub_topic1_str[200],sub_topic2_str[200];
+char sub_topic1_str[200],sub_topic2_str[200],sub_topic3_str[200];
+
+int time_diff=0;
+time_t last_time=0;
 
 void setup() {
- 
+
   Serial.begin(115200);
 
-  struct rst_info * rstinfo=system_get_rst_info();
 
-  Serial.print("Reason for reset: ");
-  switch (rstinfo->reason) {
-    case 0: Serial.print("normal startup by power on "); break; 
-    case 1: Serial.print("hardware watch dog reset "); break; 
-    case 2: Serial.print("exception reset: GPIO status won’t change "); break; 
-    case 3: Serial.print("software watch dog reset: GPIO status won’t change "); break; 
-    case 4: Serial.print("software restart ,system_restart : GPIO status won’t change "); break; 
-    case 5: Serial.print("wake up from deep-sleep "); break; 
-    case 6: Serial.print(" external system reset "); break; 
-  }
 Serial.println();
  /* IPAddress ip(192, 168, 0, 177); 
   IPAddress gw(192, 168, 0, 19); 
@@ -62,27 +58,55 @@ Serial.println();
     Serial.print(ssid);
     Serial.println(": Connecting to WiFi..");
   }
+
+
+  struct rst_info * rstinfo=system_get_rst_info();
+
+  Serial.print("Reason for last reset: ");
+  switch (rstinfo->reason) {
+    case 0: Serial.print("normal startup by power on "); sendEvent("RST:Normal Startup; connected"); break; 
+    case 1: Serial.print("hardware watch dog reset "); sendEvent("RST: Hardware Watchdog; connected"); break; 
+    case 2: Serial.print("exception reset: GPIO status won’t change "); sendEvent("RST: Exception reset; connected");break; 
+    case 3: Serial.print("software watch dog reset: GPIO status won’t change "); sendEvent("RST: SW watchdog; connected"); break; 
+    case 4: Serial.print("software restart ,system_restart : GPIO status won’t change "); sendEvent("RST: SW restart; connected");break; 
+    case 5: Serial.print("wake up from deep-sleep "); sendEvent("RST: Wakeup from sleep, connected");break; 
+    case 6: Serial.print("external system reset "); sendEvent("RST: External reset, connected");break; 
+  }
+
+
   Serial.println("Connected to the WiFi network");
   Serial.println("IP address: ");
   Serial.println(WiFi.localIP()); 
+
+
  
   client.setServer(mqttServer, mqttPort);
   client.setCallback(callback);
+  //sendEvent("Connected");
  
+  
   while (!client.connected()) {
-    Serial.println("Connecting to MQTT...");
- 
-    if (client.connect(clientID, mqttUser, mqttPassword )) {
- 
-      Serial.println("connected");  
- 
-    } else {
- 
-      Serial.print("failed with state ");
-      Serial.print(client.state());
-      delay(2000);
- 
-    }
+        last_time=millis(); // implement without the delay();   
+        Serial.println("Connecting to MQTT...");
+    
+        if (client.connect(clientID, mqttUser, mqttPassword )) {
+    
+          Serial.println("connected");  
+    
+        } else {
+          char event[32];
+          Serial.print("failed with state ");
+          Serial.print(client.state());
+          sprintf(event,"MQTT failed with state %d", client.state());
+          sendEvent(event);
+          //delay(2000);
+        while(time_diff<2000)
+         {
+           time_diff=millis()-last_time;
+         }
+         last_time=millis();
+         time_diff=0;
+       }
   }
   client.publish("pub/g46NIng-txfaUvdQZj0R6g/klrv5wfaa6t82ClQfcIR6g/jWcrox0QP1arY-cAfcIR6g/co2","00.00");
 
@@ -97,10 +121,10 @@ Serial.println();
   Serial.print("subscribing to to cell fan");
   Serial.println(sub_topic2_str);
   client.subscribe(sub_topic2_str);
-  sprintf(sub_topic1_str,"sub/%s/%s/%s/ac_on",mqttUser, deviceID,INROOM_node);
+  sprintf(sub_topic3_str,"sub/%s/%s/%s/ac_on",mqttUser, deviceID,INROOM_node);
   Serial.print("subscribing to AC on-off ");
-  Serial.println(sub_topic1_str);
-  client.subscribe(sub_topic1_str);
+  Serial.println(sub_topic3_str);
+  client.subscribe(sub_topic3_str);
   
   Serial.println();
   Serial.print(prompt);
@@ -122,11 +146,24 @@ void callback(char* topic, byte* payload, unsigned int length) {
  
 }
  
+
 void loop() {
+  
   reciveTuple();
   client.loop();
   recevieTupleAndSend();
-  delay(1);
+  //delay(1);
+  while(time_diff<5)
+  {
+    time_diff=millis()-last_time;
+    if (time_diff<0) // counter overflowed and starting over
+    {
+      last_time=time_diff;
+      time_diff=0;
+    }
+  }
+  last_time=millis();
+  time_diff=0;
 }
 
 
@@ -143,6 +180,7 @@ Insert every element to an element in a string array; */
  
     while (Serial.available() > 0 && newData == false) {
         rc = Serial.read();
+        client.loop(); // to make sure we keep MQTT alive even through this loop
         Serial.print(rc); // echo back
         switch(rc) {
           case Seperator:
@@ -224,9 +262,11 @@ void recevieTupleAndSend() {
         
             } else {
               Serial.print(err_prefix);
+              char event[32];
               Serial.print("failed with state ");
               Serial.print(client.state());
-              
+              sprintf(event,"MQTT failed with state %d", client.state());
+              sendEvent(event);
         
             }
 
@@ -241,4 +281,48 @@ void recevieTupleAndSend() {
         Serial.print(" ");
         Serial.print(prompt);
     }
+}
+
+
+void sendEvent(char *text)
+{
+
+    HTTPClient http;
+
+    static char url[200];
+
+    sprintf(url,"http://%s/deviceEvent/create/%s/%.32s",httpServer,device_key,text);
+
+    Serial.print("[HTTP] begin...\n");
+    if (http.begin(espClient, url)) {  // HTTP
+
+
+      //Serial.print("[HTTP] GET ");
+      //Serial.println(url);
+      http.addHeader("Content-Type", "application/json");
+      //http.addHeader("Content-Type", "application/json");
+      // start connection and send HTTP header
+      int httpCode = http.GET();
+
+      // httpCode will be negative on error
+      if (httpCode > 0) {
+        // HTTP header has been send and Server response header has been handled
+       // Serial.printf("[HTTP] GET... code: %d\n", httpCode);
+
+        // file found at server
+        if (httpCode == HTTP_CODE_OK || httpCode == HTTP_CODE_MOVED_PERMANENTLY) {
+          String payload = http.getString();
+          Serial.println(payload);
+        }
+      } else {
+        Serial.print(err_prefix);
+        Serial.printf("[HTTP] GET... failed, error: %s\n", http.errorToString(httpCode).c_str());
+      }
+
+      http.end();
+    } else {
+      Serial.print(err_prefix);
+      Serial.printf("[HTTP} Unable to connect\n");
+    }
+  
 }
