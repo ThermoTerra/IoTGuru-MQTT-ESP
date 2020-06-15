@@ -58,25 +58,25 @@ Serial.println();
     Serial.print(ssid);
     Serial.println(": Connecting to WiFi..");
   }
-
+  Serial.println("Connected to the WiFi network");
+  Serial.println("IP address: ");
+  Serial.println(WiFi.localIP()); 
 
   struct rst_info * rstinfo=system_get_rst_info();
 
   Serial.print("Reason for last reset: ");
   switch (rstinfo->reason) {
-    case 0: Serial.print("normal startup by power on "); sendEvent("RST:Normal Startup; connected"); break; 
-    case 1: Serial.print("hardware watch dog reset "); sendEvent("RST: Hardware Watchdog; connected"); break; 
-    case 2: Serial.print("exception reset: GPIO status won’t change "); sendEvent("RST: Exception reset; connected");break; 
-    case 3: Serial.print("software watch dog reset: GPIO status won’t change "); sendEvent("RST: SW watchdog; connected"); break; 
-    case 4: Serial.print("software restart ,system_restart : GPIO status won’t change "); sendEvent("RST: SW restart; connected");break; 
-    case 5: Serial.print("wake up from deep-sleep "); sendEvent("RST: Wakeup from sleep, connected");break; 
-    case 6: Serial.print("external system reset "); sendEvent("RST: External reset, connected");break; 
+    case 0: Serial.print("normal startup by power on "); sendEvent("RST-Normal Startup"); break; 
+    case 1: Serial.print("hardware watch dog reset "); sendEvent("RST-Hardware Watchdog"); break; 
+    case 2: Serial.print("exception reset: GPIO status won’t change "); sendEvent("RST-Exception reset");break; 
+    case 3: Serial.print("software watch dog reset: GPIO status won’t change "); sendEvent("RST-SW watchdog"); break; 
+    case 4: Serial.print("software restart ,system_restart : GPIO status won’t change "); sendEvent("RST-SW restart");break; 
+    case 5: Serial.print("wake up from deep-sleep "); sendEvent("RST-Wakeup from sleep");break; 
+    case 6: Serial.print("external system reset "); sendEvent("RST-External reset");break; 
   }
+  Serial.println();
 
 
-  Serial.println("Connected to the WiFi network");
-  Serial.println("IP address: ");
-  Serial.println(WiFi.localIP()); 
 
 
  
@@ -96,8 +96,8 @@ Serial.println();
         } else {
           char event[32];
           Serial.print("failed with state ");
-          Serial.print(client.state());
-          sprintf(event,"MQTT failed with state %d", client.state());
+          Serial.println(client.state());
+          sprintf(event,"MQTT fail %d", client.state());
           sendEvent(event);
           //delay(2000);
         while(time_diff<2000)
@@ -239,22 +239,30 @@ void recevieTupleAndSend() {
 
         strcpy(MQTT_payload,tuple_values[2]);
         if (WiFi.status() != WL_CONNECTED) {
+          #ifdef _SERIAL
             Serial.print(err_prefix);
             Serial.println("Wifi disconnected");
+          #endif
             while (WiFi.status() != WL_CONNECTED) {
             delay(500);
+          #ifdef _SERIAL
             Serial.print(err_prefix);
             Serial.print("SSID: ");
             Serial.print(ssid);
             Serial.println(": Connecting to WiFi..");
+          #endif
           }
+          #ifdef _SERIAL
           Serial.print(err_prefix);
           Serial.println("Connected to the WiFi network");
+          #endif
         }
         if (!client.connected()) {
           while (!client.connected()) {
+          #ifdef _SERIAL
             Serial.print(err_prefix);
             Serial.println("Reconnecting to MQTT...");
+          #endif
         
             if (client.connect(clientID, mqttUser, mqttPassword )) {
               Serial.print(err_prefix);
@@ -265,7 +273,7 @@ void recevieTupleAndSend() {
               char event[32];
               Serial.print("failed with state ");
               Serial.print(client.state());
-              sprintf(event,"MQTT failed with state %d", client.state());
+              sprintf(event,"MQTT fail %d", client.state());
               sendEvent(event);
         
             }
@@ -283,31 +291,71 @@ void recevieTupleAndSend() {
     }
 }
 
+ 
+
+void urlencode(char *tostr, char *str)
+{
+
+    int output_indx=0;
+    char encodedString[100]=""; // up to 3 times as large as input
+    char c;
+    char code0;
+    char code1;
+    char code2;
+    for (int i =0; i < 32; i++){
+      c=str[i];
+      if (c==0) break; //end of string
+      if (c == ' '){
+        encodedString[output_indx++]= '_';
+      } else if (isprint(c)){
+        encodedString[output_indx++]=c;
+      } else{
+        code1=(c & 0xf)+'0';
+        if ((c & 0xf) >9){
+            code1=(c & 0xf) - 10 + 'A';
+        }
+        c=(c>>4)&0xf;
+        code0=c+'0';
+        if (c > 9){
+            code0=c - 10 + 'A';
+        }
+        code2='\0';
+        encodedString[output_indx++]='.';
+        //encodedString[output_indx++]=code0;
+        //encodedString[output_indx++]=code1;
+        //encodedString+=code2;
+      }
+      yield();
+    }
+    encodedString[output_indx]='\0';
+    strcpy(tostr,encodedString);
+}
 
 void sendEvent(char *text)
 {
 
     HTTPClient http;
 
-    static char url[200];
+    static char encoded_text[100],url[300];
 
-    sprintf(url,"http://%s/deviceEvent/create/%s/%.32s",httpServer,device_key,text);
+    urlencode(encoded_text,text);
 
-    Serial.print("[HTTP] begin...\n");
+    sprintf(url,"http://%s/deviceEvent/create/%s/%s",httpServer,device_key,encoded_text);
+
+    //Serial.print("[HTTP] begin...\n");
     if (http.begin(espClient, url)) {  // HTTP
 
 
       //Serial.print("[HTTP] GET ");
-      //Serial.println(url);
+      Serial.println(url);
       http.addHeader("Content-Type", "application/json");
-      //http.addHeader("Content-Type", "application/json");
       // start connection and send HTTP header
       int httpCode = http.GET();
 
       // httpCode will be negative on error
       if (httpCode > 0) {
         // HTTP header has been send and Server response header has been handled
-       // Serial.printf("[HTTP] GET... code: %d\n", httpCode);
+          Serial.printf("[HTTP] GET... code: %d\n", httpCode);
 
         // file found at server
         if (httpCode == HTTP_CODE_OK || httpCode == HTTP_CODE_MOVED_PERMANENTLY) {
