@@ -11,6 +11,7 @@
 #include <user_interface.h>
 #include <ESP8266HTTPClient.h>
  
+ #define RESEND_SUB_TIME 60000 // in millis
 
 
 static char MQTT_path[200];
@@ -31,6 +32,61 @@ void recevieTupleAndSend();
 void callback(char* topic, byte* payload, unsigned int length);
 void sendEvent(char *text);
 
+
+typedef struct {
+    char description[30];
+    const char *node;
+    char field[100];
+    byte value[20];
+    int length;
+} sub_messages;
+
+#define NUM_SUB_TOPICS 3
+
+sub_messages subscriptions[NUM_SUB_TOPICS] {
+  {"topcell fan", TOPCELL_node, "fan_speed", 0,0},
+  {"bottom fan", BOTTOMCELL_node, "fan_speed", 0,0},
+  {"A/C switch", INROOM_node, "ac_on", 0,0},
+
+};
+
+void subscribe_topics(PubSubClient client )
+{
+ 
+  // calculate the lentgh of the base string
+  sub_base_length=4+strlen(mqttUser)+1+strlen(deviceID)+1; 
+  char sub_topic1_str[130];
+  for (int i=0;i<NUM_SUB_TOPICS; i++)
+  {
+      sprintf(sub_topic1_str,"sub/%s/%s/%s/%s",mqttUser, deviceID,subscriptions[i].node, subscriptions[i].field);
+      Serial.print("subscribing to " );
+      Serial.println(subscriptions[i].description);
+      Serial.println(sub_topic1_str);
+      client.subscribe(sub_topic1_str);
+  }
+}
+
+// every once in a while send the topics with the last recorded values over serial. This is useful in case of a reset on the receiving side
+void retain_topics()
+{
+  char topic[150];
+  //char str_value[15];
+  for (int i=0;i<NUM_SUB_TOPICS; i++)
+  {
+      if (subscriptions[i].length>0) 
+      {
+        Serial.print("refreshing subscription ");
+        Serial.print(subscriptions[i].description);
+        Serial.print("with last value ");
+        Serial.println((char *)subscriptions[i].value);
+        sprintf(topic,"sub/%s/%s/%s/%s",mqttUser, deviceID,subscriptions[i].node, subscriptions[i].field);
+    
+        callback(topic, subscriptions[i].value,subscriptions[i].length);
+      }
+  }
+}
+
+
 WiFiClient espClient;
 PubSubClient client(espClient);
 
@@ -38,6 +94,10 @@ char sub_topic1_str[200],sub_topic2_str[200],sub_topic3_str[200];
 
 int time_diff=0;
 time_t last_time=0;
+
+
+time_t last_resend_time=0;
+
 
 void setup() {
 
@@ -49,7 +109,9 @@ Serial.println();
   IPAddress gw(192, 168, 0, 19); 
   IPAddress subnet(255, 255, 255, 0); 
   IPAddress dns (203,145,184,13);
+  
   WiFi.config(ip,gw,subnet);*/
+
   WiFi.begin(ssid, password);
  
   while (WiFi.status() != WL_CONNECTED) {
@@ -110,21 +172,8 @@ Serial.println();
   }
   client.publish("pub/g46NIng-txfaUvdQZj0R6g/klrv5wfaa6t82ClQfcIR6g/jWcrox0QP1arY-cAfcIR6g/co2","00.00");
 
- 
-  // calculate the lentgh of the base string
-  sub_base_length=4+strlen(mqttUser)+1+strlen(deviceID)+1; 
-  sprintf(sub_topic1_str,"sub/%s/%s/%s/fan_speed",mqttUser, deviceID,BOTTOMCELL_node);
-  Serial.print("subscribing to bottom cell fan ");
-  Serial.println(sub_topic1_str);
-  client.subscribe(sub_topic1_str);
-  sprintf(sub_topic2_str,"sub/%s/%s/%s/fan_speed",mqttUser, deviceID,TOPCELL_node);
-  Serial.print("subscribing to to cell fan");
-  Serial.println(sub_topic2_str);
-  client.subscribe(sub_topic2_str);
-  sprintf(sub_topic3_str,"sub/%s/%s/%s/ac_on",mqttUser, deviceID,INROOM_node);
-  Serial.print("subscribing to AC on-off ");
-  Serial.println(sub_topic3_str);
-  client.subscribe(sub_topic3_str);
+  subscribe_topics(client);
+  
   
   Serial.println();
   Serial.print(prompt);
@@ -133,11 +182,37 @@ Serial.println();
  
 void callback(char* topic, byte* payload, unsigned int length) {
  
-  
-  Serial.print(sub_prefix);
-  Serial.print(topic+sub_base_length); // print only from the point of difference 
+  char * token=strtok(topic,"/");
+  char *node, *field;
+  int i;
+  // skip first 3 tokens: %s/%s/%s/%s",mqttUser, deviceID,subscriptions[i].node, subscriptions[i].field
+  for (i=0; i<3; i++ )
+  {
+    token=strtok(NULL,"/");
+  }
+  node=token;
+  for (int i=0;i<NUM_SUB_TOPICS; i++)
+  {
+      if (strcmp(token, subscriptions[i].node)==0)
+      {
+        field=strtok(NULL,"/");
+        
+        if (strcmp(field, subscriptions[i].field)==0) 
+        {
+          for (int j=0;j<length; j++)
+          {
+            subscriptions[i].value[j]=payload[j];
+          }
+          subscriptions[i].length=length;
+        }
+      }
+  }
  
-  Serial.print("/");
+  Serial.print(sub_prefix);
+  Serial.print(node); 
+  Serial.print(Seperator);
+  Serial.print(field);
+  Serial.print(Seperator);
   for (unsigned int i = 0; i < length; i++) {
     Serial.print((char)payload[i]);
   }
@@ -145,7 +220,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
   Serial.println(sub_suffix);
  
 }
- 
+
 
 void loop() {
   
@@ -164,6 +239,12 @@ void loop() {
   }
   last_time=millis();
   time_diff=0;
+  if (millis()-last_resend_time>RESEND_SUB_TIME)
+  {
+    retain_topics();
+    last_resend_time=millis();
+  }
+
 }
 
 
@@ -279,8 +360,7 @@ void recevieTupleAndSend() {
             }
 
           }
-          client.subscribe(sub_topic1_str);
-          client.subscribe(sub_topic2_str);
+          subscribe_topics(client);
         }
         
         client.publish(MQTT_path, MQTT_payload); //Topic name
